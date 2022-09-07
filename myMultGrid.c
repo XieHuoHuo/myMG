@@ -101,6 +101,7 @@ void wJacobi(double *u, double *f, int n, double w)
             u[i * n + j] = tmpu[i * n + j];
         }
     }
+    free(tmpu);
 }
 
 /**
@@ -279,10 +280,10 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
 
     if (verbose > 2)
     printf(">>> multigrid solver: n = %d, w = %f, maxIter = %d, tol = %f, verbose = %d, coarselevel = %d \n", n, w, maxIter, tol, verbose, coarselevel);
-    int iter = 0;
-    double res = 1.0;
-    int m = (n + 1) / 2;
-    double *r = (double *)malloc(n * n * sizeof(double));
+    int     iter = 0;
+    double  res  = 1.0;
+    int     m    = (n + 1) / 2;
+    double *r  = (double *)malloc(n * n * sizeof(double));
     double *rc = (double *)malloc(m * m * sizeof(double));
     double *uc = (double *)malloc(m * m * sizeof(double));
     double *pu = (double *)malloc(n * n * sizeof(double));
@@ -314,7 +315,6 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
         if ( (verbose > 0) && (outersolver) ) {
             // compute residual
             residual(u, f, r, n);
-            // double res = 0.0;
             res = 0.0;
             for (int i = 0; i < n * n; i++) {
                 res += r[i] * r[i];
