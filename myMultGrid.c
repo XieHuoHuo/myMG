@@ -281,6 +281,11 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
     printf(">>> multigrid solver: n = %d, w = %f, maxIter = %d, tol = %f, verbose = %d, coarselevel = %d \n", n, w, maxIter, tol, verbose, coarselevel);
     int iter = 0;
     double res = 1.0;
+    int m = (n + 1) / 2;
+    double *r = (double *)malloc(n * n * sizeof(double));
+    double *rc = (double *)malloc(m * m * sizeof(double));
+    double *uc = (double *)malloc(m * m * sizeof(double));
+    double *pu = (double *)malloc(n * n * sizeof(double));
     while ( (iter < maxIter) && (res > tol) )
     {
         iter++;
@@ -288,20 +293,15 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
         for (int i = 0; i < numSweeps; i++)
         wJacobi(u, f, n, w);
         // compute residual
-        double *r = (double *)malloc(n * n * sizeof(double));
         residual(u, f, r, n);
         // restrict residual to coarse-grid
-        int m = (n + 1) / 2;
-        double *rc = (double *)malloc(m * m * sizeof(double));
         restriction(r, rc, n);
         // solve on coarse-grid
-        double *uc = (double *)malloc(m * m * sizeof(double));
         for (int i = 0; i < m * m; i++) {
             uc[i] = 0.0;
         }
         multigrid(uc, rc, m, w, 1, tol, verbose, coarselevel - 1, 0, numSweeps);
         // prolongate coarse-grid solution to fine-grid
-        double *pu = (double *)malloc(n * n * sizeof(double));
         prolongation(uc, pu, m);
         // update fine-grid solution
         for (int i = 0; i < n * n; i++) {
@@ -325,6 +325,12 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
     }
     if (verbose > 2)
     printf("<<< done with multigrid solver \n");
+
+    // free memory
+    free(r);
+    free(rc);
+    free(uc);
+    free(pu);
 }
 
 #ifdef DEBUG
@@ -332,13 +338,13 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
 int main()
 {
     // set up parameters
-    int N = 129;            // N = 2**k + 1
-    double w = 2.0 / 3.0;   // weight of weighted-Jacobi smoother
-    int maxIter = 40;       // maximum number of iterations
-    double tol = 1e-6;      // tolerance of residual
-    int verbose = 1;        // print residual every verbose iterations
-    int coarselevel = 5;    // number of coarse-grid levels
-    int numSweeps = 3;      // number of sweeps on each level
+    int     N           = 129;      // N = 2**k + 1
+    double  w           = 2.0 / 3.0;// weight of weighted-Jacobi smoother
+    int     maxIter     = 40;       // maximum number of iterations
+    double  tol         = 1e-6;     // tolerance of residual
+    int     verbose     = 1;        // print residual every verbose iterations
+    int     coarselevel = 5;        // number of coarse-grid levels
+    int     numSweeps   = 3;        // number of sweeps on each level
 
     // initialize dofs
     double *u = (double *)malloc(N * N * sizeof(double));
