@@ -1,0 +1,1 @@
+gcc -o tst myMultGrid.c myCG.c myMultGrid.h myCG.h -lm
