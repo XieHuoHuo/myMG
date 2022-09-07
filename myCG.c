@@ -12,10 +12,15 @@
 void matvec(double *u, double *Au, int n)
 {
     int i;
-    Au[0] = 2*u[0] - u[1];
+    // Au[0] = 2*u[0] - u[1];
     for (i=1; i<n-1; i++)
         Au[i] = -u[i-1] + 2*u[i] - u[i+1];
-    Au[n-1] = -u[n-2] + 2*u[n-1];
+    // Au[n-1] = -u[n-2] + 2*u[n-1];
+    // divide by h^2
+    // double h = 1.0/(n-1);
+    // for (i=0; i<n; i++)
+    //     Au[i] /= h*h;
+
 }
 #endif
 
@@ -84,12 +89,11 @@ void CGSolver(double *u, double *f, int n, int maxIter, double tol, int verbose)
     double rTr = vecInnProduct(r, r, n);
     double rTr_old = rTr;
     double res = sqrt(rTr);
-    printf("CG: initial residual = %f\n", res);
+    // printf("CG: initial residual = %e\n", res);
     int iter = 0;
     while ( (iter < maxIter) && (res > tol) )
     {
         iter++;
-        #if CG_DEBUG
         if (iter == 1) {
             vecUpluseaV(p, r, n, 1.0); // p = r
         } else {
@@ -105,40 +109,34 @@ void CGSolver(double *u, double *f, int n, int maxIter, double tol, int verbose)
         rTr_old = rTr;
         rTr = vecInnProduct(r, r, n);
         res = sqrt(rTr);
-        matvec(u, debugtmp, n);
-        vecaUpluseV(debugtmp, f, n, -1.0);
-        printf("CG: %f\n", vecNorm(debugtmp, n));
         // if (verbose > 2) {
             printf("CGiter = %d, res = %e \n", iter, res);
         // }
-        #else
-        // steep descent
-        vecCopy(p, r, n, 0.1); // p = alpha * r
-        printf("p[n/3 + 5] = %f\n", p[n/3 + 5]);
-        printf("f[n/3 + 5] = %f\n", f[n/3 + 5]);
-        printf("u[n/3 + 5] = %f\n", u[n/3 + 5]);
-        matvec(p, Ap, n);
-        vecUpluseaV(u, p, n, 1.0); // u = u + p
-        vecUpluseaV(r, Ap, n, -1.0); // r = r - Ap
-        res = vecNorm(r, n);
-        // if (verbose > 2) {
-            printf("CGiter = %d, res = %f \n", iter, res);
-        // }
-        #endif
     }
     
 }
 
 #if MYCG_DEBUG
+#define PI 3.14159265358979323846
+// right-hand side
+double rhs(double x)
+{
+    return PI*PI*sin(PI*x);
+}
+// exact solution
+double exact(double x)
+{
+    return sin(PI*x);
+}
 int main(int argc, char *argv[])
 {
-    int n = 3;
+    int n = 129;
     double *u, *f;
     u = (double *)malloc(n * sizeof(double));
     f = (double *)malloc(n * sizeof(double));
     for (int i = 0; i < n; i++) {
         u[i] = 0.0;
-        f[i] = 1.0;
+        f[i] = rhs(i*1.0/(n-1));
     }
     CGSolver(u, f, n, 1000, 1e-10, 1);
     // BiCGStabSolver(u, f, n, 1000, 1e-6, 1);

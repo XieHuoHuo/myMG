@@ -40,13 +40,13 @@ void printGrid(double *u, int n)
 
 // solution function
 double sol(double x, double y) {
-    return sin(PI * x) * sin(PI * y);
-    // return x * x + y * y;
+    // return sin(PI * x) * sin(PI * y);
+    return x * x + y * y;
 }
 // right-hand side function
 double rhs(double x, double y) {
-    return 2 * PI * PI * sin(PI * x) * sin(PI * y);
-    // return 4.0;
+    // return 2 * PI * PI * sin(PI * x) * sin(PI * y);
+    return 4.0;
 }
 
 /**
@@ -70,6 +70,15 @@ void matvec(double *u, double *v, int n)
     }
 }
 
+// vector u = u - v
+void vecUminusV(double *u, double *v, int n)
+{
+    int i;
+    for (i = 0; i < n; i++)
+    {
+        u[i] -= v[i];
+    }
+}
 /**
  * @brief weighted-Jacobi smoother
  * 
@@ -96,12 +105,20 @@ void wJacobi(double *u, double *f, int n, double w)
 
 /**
  * @brief restriction operator
+ *  used to restrict the residual from fine grid to coarse grid
  *  weighted average of nine points:
  *      1/4 1/2 1/4
  *      1/2 1.0 1/2
  *      1/4 1/2 1/4
- *  reduce No. grid-point to its 1/4
- *  u is of size (2*m+1) * (2*m+1), ru is of size m * m
+ *  reduce No. grid-point to its 1/4 (approx)
+ *      * = * = * = * = *
+ *      = - - - - - - - =
+ *      * - + - + - + - *
+ *      = - - - - - - - =
+ *      * - + - + - + - *
+ *      = - - - - - - - =
+ *      * = * = * = * = *
+ *  u is of size (2*m-1) * (2*m-1), ru is of size m * m
  */
 void restriction(double *u, double *ru, int n)
 {
@@ -113,44 +130,60 @@ void restriction(double *u, double *ru, int n)
         printf("Error: n is even in restriction()! n = %d is not allowed! \n ", n);
         exit(1);
     }
-    int m = (n - 1) / 2;
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < m; j++) {
-            ru[i * m + j] = 0.25 * u[2 * i * n + 2 * j] + 0.5 * u[(2 * i + 1) * n + 2 * j] + 0.25 * u[(2 * i + 2) * n + 2 * j]
-                          + 0.5 * u[2 * i * n + 2 * j + 1] + u[(2 * i + 1) * n + 2 * j + 1] + 0.5 * u[(2 * i + 2) * n + 2 * j + 1]
-                          + 0.25 * u[2 * i * n + 2 * j + 2] + 0.5 * u[(2 * i + 1) * n + 2 * j + 2] + 0.25 * u[(2 * i + 2) * n + 2 * j + 2];
+    int m = (n + 1) / 2;
+    // interior points
+    for (int i = 1; i < m - 1; i++) {
+        for (int j = 1; j < m - 1; j++) {
+            ru[i * m + j] = 1.0 * u[2 * i * n + 2 * j] 
+                          + 0.5  * (u[(2 * i - 1) * n + 2 * j] 
+                          +         u[(2 * i + 1) * n + 2 * j] 
+                          +         u[2 * i * n + 2 * j - 1] 
+                          +         u[2 * i * n + 2 * j + 1])
+                          + 0.25 * (u[(2 * i - 1) * n + 2 * j - 1] 
+                          +         u[(2 * i - 1) * n + 2 * j + 1] 
+                          +         u[(2 * i + 1) * n + 2 * j - 1] 
+                          +         u[(2 * i + 1) * n + 2 * j + 1]);
             ru[i * m + j] /= 4.0;
         }
+    }
+    // boundary points (only need to set zero)
+    for (int i = 0; i < m; i++) {
+        ru[i * m] = 0.0;
+        ru[i * m + m - 1] = 0.0;
+        ru[i] = 0.0;
+        ru[(m - 1) * m + i] = 0.0;
     }
 }
 
 /**
  * @brief prolongation operator
  *  inverse operation of restriction operator,
+ *  used to prolong the correction from coarse grid to fine grid
  *  scatter coarse-grid dofs to fine-grid dofs with dual weights:
  *      1/4 1/2 1/4
  *      1/2 1.0 1/2
  *      1/4 1/2 1/4
  *  increase No. grid-point to its 4 times
- *  u is of size m * m, pu is of size (2*m+1) * (2*m+1)
+ *  u is of size m * m, pu is of size (2*m-1) * (2*m-1)
  */  
 void prolongation(double *u, double *pu, int m)
 {
-    int n = 2 * m + 1;
+    int n = 2 * m - 1;
     for (int i = 0; i < n * n; i++) {
         pu[i] = 0.0;
     }
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < m; j++) {
-            pu[2 * i * (2 * m + 1) + 2 * j] += 0.25 * u[i * m + j];
-            pu[(2 * i + 1) * (2 * m + 1) + 2 * j] += 0.5 * u[i * m + j];
-            pu[(2 * i + 2) * (2 * m + 1) + 2 * j] += 0.25 * u[i * m + j];
-            pu[2 * i * (2 * m + 1) + 2 * j + 1] += 0.5 * u[i * m + j];
-            pu[(2 * i + 1) * (2 * m + 1) + 2 * j + 1] += u[i * m + j];
-            pu[(2 * i + 2) * (2 * m + 1) + 2 * j + 1] += 0.5 * u[i * m + j];
-            pu[2 * i * (2 * m + 1) + 2 * j + 2] += 0.25 * u[i * m + j];
-            pu[(2 * i + 1) * (2 * m + 1) + 2 * j + 2] += 0.5 * u[i * m + j];
-            pu[(2 * i + 2) * (2 * m + 1) + 2 * j + 2] += 0.25 * u[i * m + j];
+    // interior points
+    for (int i = 1; i < m - 1; i++) {
+        for (int j = 1; j < m - 1; j++) {
+            pu[ 2 * i      * n + 2 * j]     += 1.0  * u[i * m + j];
+            pu[(2 * i - 1) * n + 2 * j]     += 0.5  * u[i * m + j];
+            pu[(2 * i + 1) * n + 2 * j]     += 0.5  * u[i * m + j];
+            pu[ 2 * i      * n + 2 * j - 1] += 0.5  * u[i * m + j];
+            pu[ 2 * i      * n + 2 * j + 1] += 0.5  * u[i * m + j];
+            pu[(2 * i - 1) * n + 2 * j - 1] += 0.25 * u[i * m + j];
+            pu[(2 * i - 1) * n + 2 * j + 1] += 0.25 * u[i * m + j];
+            pu[(2 * i + 1) * n + 2 * j - 1] += 0.25 * u[i * m + j];
+            pu[(2 * i + 1) * n + 2 * j + 1] += 0.25 * u[i * m + j];
         }
     }
 }
@@ -204,7 +237,7 @@ void error(double *u, double *err, int n)
  *  
  */
 #define USEJACOBI 0
-void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, int verbose, int coarselevel, int outersolver)
+void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, int verbose, int coarselevel, int outersolver, int numSweeps)
 {
     if ( (coarselevel < 1) || (n < 3) ) {
         #if USEJACOBI
@@ -224,7 +257,7 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
         if (verbose > 2)
         printf(">>> doing CG iteration on the coarsest level \n");
         // BiCGStabSolver(u, f, n*n, 10, tol, verbose);
-        CGSolver(u, f, n*n, 10, tol, verbose);
+        CGSolver(u, f, n*n, 100, 1e-5, verbose);
         if (verbose > 2)
         printf("<<< done with CG iteration on the coarsest level \n");
         #endif
@@ -238,7 +271,7 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
                 res += r[i] * r[i];
             }
             res = sqrt(res);
-            printf("res = %f \n", res);
+            // printf("res = %e \n", res);
             free(r);    
         }
         return;
@@ -247,16 +280,18 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
     if (verbose > 2)
     printf(">>> multigrid solver: n = %d, w = %f, maxIter = %d, tol = %f, verbose = %d, coarselevel = %d \n", n, w, maxIter, tol, verbose, coarselevel);
     int iter = 0;
-    while (iter < maxIter)
+    double res = 1.0;
+    while ( (iter < maxIter) && (res > tol) )
     {
         iter++;
         // pre-smoothing
+        for (int i = 0; i < numSweeps; i++)
         wJacobi(u, f, n, w);
         // compute residual
         double *r = (double *)malloc(n * n * sizeof(double));
         residual(u, f, r, n);
         // restrict residual to coarse-grid
-        int m = (n - 1) / 2;
+        int m = (n + 1) / 2;
         double *rc = (double *)malloc(m * m * sizeof(double));
         restriction(r, rc, n);
         // solve on coarse-grid
@@ -264,7 +299,7 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
         for (int i = 0; i < m * m; i++) {
             uc[i] = 0.0;
         }
-        multigrid(uc, rc, m, w, 1, tol, verbose, coarselevel - 1, 0);
+        multigrid(uc, rc, m, w, 1, tol, verbose, coarselevel - 1, 0, numSweeps);
         // prolongate coarse-grid solution to fine-grid
         double *pu = (double *)malloc(n * n * sizeof(double));
         prolongation(uc, pu, m);
@@ -273,17 +308,19 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
             u[i] += pu[i];
         }
         // post-smoothing
+        for (int i = 0; i < numSweeps; i++)
         wJacobi(u, f, n, w);
 
         if ( (verbose > 0) && (outersolver) ) {
             // compute residual
             residual(u, f, r, n);
-            double res = 0.0;
+            // double res = 0.0;
+            res = 0.0;
             for (int i = 0; i < n * n; i++) {
                 res += r[i] * r[i];
             }
             res = sqrt(res);
-            printf("iter = %d, res = %f \n", iter, res);
+            printf("iter = %d, res = %e \n", iter, res);
         }
     }
     if (verbose > 2)
@@ -295,11 +332,13 @@ void multigrid(double *u, double *f, int n, double w, int maxIter, double tol, i
 int main()
 {
     // set up parameters
-    int N = 127; // N = 2**k - 1
-    double w = 2.0 / 3.0; // weight of weighted-Jacobi smoother
-    int maxIter = 1; // maximum number of iterations
-    double tol = 1e-6; // tolerance of residual
-    int verbose = 1; // print residual every verbose iterations
+    int N = 129;            // N = 2**k + 1
+    double w = 2.0 / 3.0;   // weight of weighted-Jacobi smoother
+    int maxIter = 40;       // maximum number of iterations
+    double tol = 1e-6;      // tolerance of residual
+    int verbose = 1;        // print residual every verbose iterations
+    int coarselevel = 5;    // number of coarse-grid levels
+    int numSweeps = 3;      // number of sweeps on each level
 
     // initialize dofs
     double *u = (double *)malloc(N * N * sizeof(double));
@@ -307,30 +346,42 @@ int main()
     for (int i = 0; i < N * N; i++) {
         u[i] = 0.0; // initial guess and zero boundary conditions
     }
+
     double h = 1.0 / (N - 1);
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
             f[i * N + j] = rhs(i * h, j * h);
         }
     }
+    // set boundary to zero
+    for (int i = 0; i < N; i++) {
+        f[i * N] = 0.0;
+        f[i * N + N - 1] = 0.0;
+        f[i] = 0.0;
+        f[(N - 1) * N + i] = 0.0;
+    }
 
-    // solve Poisson equation
-    // double *err = (double *)malloc(N * N * sizeof(double));
-    // error(u, err, N);
-    // printGrid(err, N);
-    multigrid(u, f, N, w, maxIter, tol, verbose, 2, 1);
+    // solve Poisson equation and time it
+    clock_t start = clock();
+    printf(">>> solving Poisson equation on a 2d-square domain with Dirichlet boundary conditions \n");
+    multigrid(u, f, N, w, maxIter, tol, verbose, coarselevel, 1, numSweeps);
+    printf("<<< done with solving Poisson equation \n");
+    clock_t end = clock();
+    double time = (double)(end - start) / CLOCKS_PER_SEC;
+    printf("time = %f seconds \n", time);
 
-    // exact solution
-    // double *exactsol = (double *)malloc(N * N * sizeof(double));
-    // for (int i = 0; i < N; i++) {
-    //     for (int j = 0; j < N; j++) {
-    //         exactsol[i * N + j] = sol(i * h, j * h);
-    //     }
-    // }
-    // double *r;
-    // r = (double *)malloc(N * N * sizeof(double));
-    // residual(exactsol, f, r, N);
-    // printGrid(r, N);
+    // f L2 norm
+    double fL2 = 0.0;
+    for (int i = 0; i < N * N; i++) {
+        fL2 += f[i] * f[i];
+    }
+    fL2 = sqrt(fL2);
+    printf("L2 norm of f = %e \n", fL2);
+
+    // free memory
+    free(u);
+    free(f);
+
     return 0;
 }
 #endif
